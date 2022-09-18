@@ -25,8 +25,8 @@ def main():
         Encoder(0, 1, motor2040.ENCODER_D, direction=NORMAL_DIR, count_microsteps=True),
     ]
 
-    i2c = I2C(0, sda=Pin(20), scl=Pin(21))
-    imu = IMU(i2c)
+    i2c0 = I2C(0, sda=Pin(20), scl=Pin(21))
+    imu = IMU(i2c0)
 
     uart0 = UART(0, tx=Pin(16), rx=Pin(17))
     ibus = IBus(uart0)

@@ -9,7 +9,7 @@ from ibus_rx import IBus
 class Robot:
     ODO_PERIOD = 60 # in milliseconds
     PRINT_DIVIDER = 1000
-    MAX_TT = 0.12 # maximum angle correction by the position loop
+    MAX_TT = 0.15 # maximum angle correction by the position loop
     THETA_OFF = -0.26 # stable angle offset
 
 
@@ -25,7 +25,7 @@ class Robot:
         self.UPDATE_PER = 1 / imu.RATE
         # PID settings
         self.alpha_pid  = PID(1.50, 0.0, 0.10, self.ODO_PERIOD/1000)
-        self.pos_pid    = PID(0.20, 0.0, 0.25, self.ODO_PERIOD/1000)
+        self.pos_pid    = PID(0.20, 0.0, 0.30, self.ODO_PERIOD/1000)
         self.theta_pid  = PID(5.50, 0.1, 0.05, self.UPDATE_PER)
         
         # pos and angles
@@ -34,6 +34,8 @@ class Robot:
         self.theta = self.THETA_OFF
 
         # controls
+        self.target_alpha = 0.0
+        self.target_pos = 0.0
         self.target_theta = 0.0
         self.alpha_cor = 0.0
 
@@ -45,6 +47,12 @@ class Robot:
         # fuse accelerometer and gyroscope mesurements
         self.theta = 0.99*(self.theta+dt*self.UPDATE_PER) + 0.01*ang
 
+    def update_cmd(self):
+        input = self.ibus.read_normalised()
+        if input:
+            # assuming channels are in AETR order
+            self.target_alpha -= input[0] / 1000
+            self.target_pos -= input[2] / 1000
 
     def update_odometry(self, t):
         # measured linear and rotational movements
@@ -52,16 +60,16 @@ class Robot:
         c2 = self.encoders[1].capture()
         self.alpha += (c1.delta - c2.delta) / 2000.0 
         self.pos += (c1.delta + c2.delta) / 2000.0
-        self.pos_pid.setpoint = 0.0
 
+        self.pos_pid.setpoint = self.target_pos
         self.target_theta = clamp(-self.pos_pid.calculate(self.pos), self.MAX_TT)
 
-        self.alpha_pid.setpoint = 0.0
+        self.alpha_pid.setpoint = self.target_alpha
         self.alpha_cor = self.alpha_pid.calculate(self.alpha)
 
 
     def log_debug(self, t):
-        print("- ALPHA:", self.alpha, "POS:", self.pos, "TT:", self.target_theta, "T:", self.theta, "delay:", self.delay)
+        print("- TP:", self.target_pos, "POS:", self.pos, "T:", self.theta, "delay:", self.delay)
 
 
     def run(self):
@@ -72,6 +80,8 @@ class Robot:
         start = time.ticks_us()
 
         while True:
+            self.update_cmd()
+            
             self.update_imu()
 
             # inclination angle we are aiming for
@@ -83,7 +93,7 @@ class Robot:
             self.motors[1].speed(speed_out - self.alpha_cor / 2.0)
 
             # failsafe
-            if abs(self.pos)>1.0 or abs(self.theta)>0.8:
+            if abs(self.pos-self.target_pos)>0.5 or abs(self.theta)>0.8:
                 raise BaseException("failsafe")
 
             # timer management
