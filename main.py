@@ -1,6 +1,7 @@
 import gc
 import time
 import math
+import sys
 
 from imu import IMU
 from ibus_rx import IBus
@@ -41,7 +42,7 @@ def main():
     try:
         robot.run()
     except BaseException as e:
-        print("error:", e)
+        sys.print_exception(e)
     finally:        
         for m in motors:
             m.disable()
