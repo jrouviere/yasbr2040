@@ -8,8 +8,7 @@ from ibus_rx import normalise
 
 class Robot:
     ODO_PERIOD = 60 # in milliseconds
-    PRINT_DIVIDER = 1000
-    MAX_TT = 0.20 # maximum angle correction by the position loop
+    MAX_TT = 0.25 # maximum angle correction by the position loop
     THETA_OFF = -0.26 # stable angle offset
 
 
@@ -24,18 +23,18 @@ class Robot:
 
         self.UPDATE_PER = 1 / imu.RATE
         # PID settings
-        self.alpha_pid  = PID(1.50, 0.0, 0.10, self.ODO_PERIOD/1000)
-        self.pos_pid    = PID(0.20, 0.0, 0.30, self.ODO_PERIOD/1000)
+        self.alpha_pid  = PID(4.00, 0.0, 0.10, self.ODO_PERIOD/1000)
+        self.speed_pid  = PID(5.00, 0.3, 0.02, self.ODO_PERIOD/1000)
         self.theta_pid  = PID(5.50, 0.1, 0.05, self.UPDATE_PER)
         
-        # pos and angles
+        # speed and angles
         self.alpha = 0.0
-        self.pos = 0.0
+        self.speed = 0.0
         self.theta = self.THETA_OFF
 
         # controls
         self.target_alpha = 0.0
-        self.target_pos = 0.0
+        self.target_speed = 0.0
         self.target_theta = 0.0
         self.alpha_cor = 0.0
 
@@ -51,18 +50,21 @@ class Robot:
         input = self.ibus.read_raw()
         if input:
             # assuming channels are in AETR order
-            self.target_alpha -= normalise(input[0]) / 500
-            self.target_pos -= normalise(input[2]) / 500
+            alpha_cmd = normalise(input[0])
+            self.target_alpha -= deadband(alpha_cmd, 0.05) / 1000
+
+            sp_cmd = normalise(input[2])
+            self.target_speed = -deadband(sp_cmd, 0.05) / 20
 
     def update_odometry(self):
         # measured linear and rotational movements
         c1 = self.encoders[0].capture()
         c2 = self.encoders[1].capture()
         self.alpha += (c1.delta - c2.delta) / 2000.0 
-        self.pos += (c1.delta + c2.delta) / 2000.0
+        self.speed = (c1.delta + c2.delta) / 2000.0
 
-        self.pos_pid.setpoint = self.target_pos
-        self.target_theta = clamp(-self.pos_pid.calculate(self.pos), self.MAX_TT)
+        self.speed_pid.setpoint = self.target_speed
+        self.target_theta = clamp(-self.speed_pid.calculate(self.speed), self.MAX_TT)
 
         self.alpha_pid.setpoint = self.target_alpha
         self.alpha_cor = self.alpha_pid.calculate(self.alpha)
@@ -78,7 +80,7 @@ class Robot:
         
 
     def log_debug(self):
-        print("- TP:", self.target_pos, "POS:", self.pos, "T:", self.theta, "delay:", self.delay)
+        print("- TSP:", self.target_speed, "SP:", self.speed, "TT:", self.target_theta, "delay:", self.delay)
 
     def set_odo(self, t):
         self.run_odo = True
@@ -114,7 +116,7 @@ class Robot:
             self.update_speed()
 
             # failsafe
-            if abs(self.pos-self.target_pos)>0.5 or abs(self.theta)>0.8:
+            if  abs(self.speed)>0.2 or abs(self.theta)>0.8:
                 raise BaseException("failsafe")
 
             if self.run_debug:
@@ -133,4 +135,9 @@ def clamp(val, vmax):
         return -vmax
     if val > vmax:
         return vmax
+    return val
+
+def deadband(val, band):
+    if abs(val) < band:
+        return 0
     return val
