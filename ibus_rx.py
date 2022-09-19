@@ -26,9 +26,7 @@ class IBus:
         if data[0] == 0x20 and data[1] == 0x40 and checksum == 0xFFFF:
             return data[2:-1]
 
-    def read_normalised(self):
-        vals = self.read_raw()
-        if vals:
-            # midpoint 1500
-            # range [988; 2012]
-            return [(v-1500) / 512.0 for v in vals]
+def normalise(value):
+    # midpoint 1500
+    # range [988; 2012]
+    return (value-1500) / 512.0

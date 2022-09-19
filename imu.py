@@ -6,11 +6,13 @@ import ustruct
 Helper for ST LSM6DS3 based IMU
 """
 
+
+# used to convert to radian/sec
+# based on the config use in init
+GYRO_CONV = 1000.0 * math.pi / 180.0 / 32768.0
+
 class IMU:
     RATE = 416
-    # used to convert to radian/sec
-    # based on the config use in init
-    GYRO_CONV = 1000.0 * math.pi / 180.0 / 32768.0
 
     OUTX_L_G = 0x22
     OUTX_L_XL = 0x28
@@ -34,9 +36,11 @@ class IMU:
     def read(self):
         gyro_data = self.i2c.readfrom_mem(0x6A, self.OUTX_L_G, 6)
         gyro = ustruct.unpack("<hhh", gyro_data)
-        gyro = [g * self.GYRO_CONV for g in gyro]
 
         acc_data = self.i2c.readfrom_mem(0x6A, self.OUTX_L_XL, 6)
         acc = ustruct.unpack("<hhh", acc_data)
 
         return gyro, acc
+
+def to_radsec(value):
+    return value * GYRO_CONV
